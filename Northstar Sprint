@@ -160,7 +160,5 @@ code{background:#eef3fb;border:1px solid #d8e3f5;border-radius:6px;padding:1px 5
 .st.auto{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
 .st.manual{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
 
-/* DASHBOARD */
-.dash-wrap{padding:26px 0 60px}
-.dash-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px}
-.dash-head h2{font-size:20px}
+
+
