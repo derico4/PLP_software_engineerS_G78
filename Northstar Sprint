@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nor S Retail Co. — Support Deflection MVP</title>
+<title>NorthStar Sprint — Support Deflection MVP</title>
 <!--
   FIX LOG (this revision)
-  • Chat "Send" rebuilt with robust listeners — every inquiry is now recorded (see Dashboard → Live inquiry log).
-  • Strategy tab removed. Metrics renamed to "Dashboard" with graphs & performance panels.
-  • Assistant renamed "Home" with a welcoming, commitment-first message.
-  • Self-Serve now has a product SEARCH BAR + DROPDOWN + live stock-list grid (new product codes, varied catalogue).
-  • All tabs re-wired & fully responsive.
+  • TABS FIXED — previous build had a wiring bug (tabBtns[tabBtns]) that threw a JS error and killed
+    all interactivity. Rewired with clean forEach listeners; every tab verified.
+  • COMPANY RENAMED → "NorthStar Sprint" everywhere (title, brand, welcome, footer, chat).
+  • LIVE CHARTS ENABLED — dashboard now streams data: a live feed ticks every 5s, updating the
+    deflection donut, category bars, weekly trend line and a rolling live-activity sparkline in
+    real time, with a LIVE badge, "last updated" clock and pause/resume control.
 -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/css/inter@latest/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/css/inter@latest/600.css">
@@ -118,7 +119,6 @@ code{background:#eef3fb;border:1px solid #d8e3f5;border-radius:6px;padding:1px 5
 .side-card input:focus,.side-card select:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(47,107,255,.12)}
 .row2{display:flex;gap:8px;margin-top:16px}
 .row2 .btn{flex:1}
-hr.sep{border:none;border-top:1px dashed var(--line);margin:18px 0 4px}
 .notify-row{display:flex!important;align-items:center;gap:8px;text-transform:none!important;letter-spacing:0!important;font-weight:600!important;color:var(--ink)!important;font-size:13px!important;margin-top:12px!important}
 .search-wrap{position:relative}
 .search-wrap input{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 14px 11px 38px;font-size:13.5px;outline:none;transition:.2s;background:#fff}
@@ -162,6 +162,5 @@ hr.sep{border:none;border-top:1px dashed var(--line);margin:18px 0 4px}
 
 /* DASHBOARD */
 .dash-wrap{padding:26px 0 60px}
-.m-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
-.m-card{background:#fff;border:1px solid var(--line);border-radius:var(--rad);box-shadow:var(--sh);padding:18px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
-.m-card .num{font-family:'Space Grotesk';font-size:32px;font-weight:700;color:var(--acc)}
+.dash-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.dash-head h2{font-size:20px}
