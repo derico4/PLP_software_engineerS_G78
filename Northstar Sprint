@@ -704,3 +704,127 @@ function renderTickets(){
   $('agMan').textContent=MET.manual;
 }
 
+/* =============== DASHBOARD (LIVE CHARTS) =============== */
+function renderTrend(){
+  var d=TREND.d,e=TREND.e,max=0,i;
+  for(i=0;i<7;i++){ if(d[i]>max)max=d[i]; if(e[i]>max)max=e[i]; }
+  max=Math.max(10,Math.ceil(max/10)*10);
+  var W=560,H=215,L=36,R=12,T=14,B=30;
+  function X(i){ return L+i*(W-L-R)/6; }
+  function Y(v){ return T+(1-v/max)*(H-T-B); }
+  var ptsD='',ptsE='',dots='',grid='',labs='';
+  for(i=0;i<7;i++){ ptsD+=X(i)+','+Y(d[i])+' '; ptsE+=X(i)+','+Y(e[i])+' '; }
+  var area='M'+X(0)+','+Y(d[0]); for(i=1;i<7;i++){ area+=' L'+X(i)+','+Y(d[i]); } area+=' L'+X(6)+','+(H-B)+' L'+X(0)+','+(H-B)+' Z';
+  for(i=0;i<7;i++){ dots+='<circle cx="'+X(i)+'" cy="'+Y(d[i])+'" r="4" fill="#2f6bff"><title>'+DAYS[i]+': '+d[i]+' deflected</title></circle><circle cx="'+X(i)+'" cy="'+Y(e[i])+'" r="3.5" fill="#f59e0b"><title>'+DAYS[i]+': '+e[i]+' escalated</title></circle>'; labs+='<text x="'+X(i)+'" y="'+(H-8)+'" text-anchor="middle" class="tg">'+DAYS[i]+'</text>'; }
+  for(var g=0;g<=4;g++){ var v=max*g/4, yy=Y(v); grid+='<line x1="'+L+'" y1="'+yy+'" x2="'+(W-R)+'" y2="'+yy+'" stroke="#edf2fa"/><text x="'+(L-6)+'" y="'+(yy+4)+'" text-anchor="end" class="tg">'+Math.round(v)+'</text>'; }
+  $('trendSvg').innerHTML=grid+'<path d="'+area+'" fill="rgba(47,107,255,.10)"/><polyline points="'+ptsD+'" fill="none" stroke="#2f6bff" stroke-width="2.5" stroke-linecap="round"/><polyline points="'+ptsE+'" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 4"/>'+dots+labs;
+}
+function renderSpark(){
+  var s=LIVE_SERIES, max=Math.max.apply(null,s), W=560,H=90,L=8,R=14,T=10,B=10, i;
+  var pts='';
+  for(i=0;i<s.length;i++){ var x=L+i*(W-L-R)/(s.length-1); var y=T+(1-s[i]/max)*(H-T-B); pts+=x+','+y+' '; }
+  var area='M'+L+','+(H-B); for(i=0;i<s.length;i++){ var xx=L+i*(W-L-R)/(s.length-1); var yy=T+(1-s[i]/max)*(H-T-B); area+=' L'+xx+','+yy; } area+=' L'+(W-R)+','+(H-B)+' Z';
+  var lx=L+(s.length-1)*(W-L-R)/(s.length-1), ly=T+(1-s[s.length-1]/max)*(H-T-B);
+  $('sparkSvg').innerHTML='<path d="'+area+'" fill="rgba(13,148,136,.12)"/><polyline points="'+pts+'" fill="none" stroke="#0d9488" stroke-width="2.5" stroke-linecap="round"/><circle cx="'+lx+'" cy="'+ly+'" r="5" fill="#0d9488" class="pulse-dot"><title>now: '+s[s.length-1]+' deflected</title></circle>';
+}
+function renderLog(){
+  $('logBody').innerHTML=INQ.map(function(r){
+    return '<tr><td>'+r.t+'</td><td>'+esc(r.ch)+'</td><td>'+esc(r.tx)+'</td><td>'+esc(r.i)+'</td><td><span class="o-badge '+r.oc+'">'+r.o+'</span></td></tr>';
+  }).join('');
+}
+function renderMetrics(){
+  var defl=MET.solved+MET.auto, tot=defl+MET.escalated+MET.manual;
+  var rate=Math.round(100*defl/tot);
+  $('mRate').textContent=rate+'%';
+  var C=2*Math.PI*51, fg=$('donutFg');
+  fg.style.strokeDasharray=String(C);
+  fg.style.strokeDashoffset=String(C*(1-defl/tot));
+  $('mDefl').textContent=String(defl);
+  $('mHours').textContent=((defl*4)/60).toFixed(1)+' h';
+  var rows=[['Order status',MET.catVol.order,'#2f6bff'],['Returns & refunds',MET.catVol.return,'#7c3aed'],['Stock availability',MET.catVol.stock,'#0d9488']];
+  var max=Math.max(rows[0][1],rows[1][1],rows[2][1]);
+  $('catBars').innerHTML=rows.map(function(r){
+    return '<div class="bar-row"><div class="bl"><span>'+r[0]+'</span><span>'+r[1]+' deflected</span></div><div class="bar"><i style="width:'+Math.round(100*r[1]/max)+'%;background:'+r[2]+'"></i></div></div>';
+  }).join('');
+  $('chanPerf').innerHTML=
+    '<div class="bar-row"><div class="bl"><span>💬 Chat assistant</span><span>'+Math.round(MET.solved*0.52)+' deflected · ~8s</span></div><div class="bar"><i style="width:78%;background:#2f6bff"></i></div></div>'+
+    '<div class="bar-row"><div class="bl"><span>🔎 Self-serve lookup</span><span>'+Math.round(MET.solved*0.30)+' deflected · ~15s</span></div><div class="bar"><i style="width:46%;background:#7c3aed"></i></div></div>'+
+    '<div class="bar-row"><div class="bl"><span>⚡ Triage automation</span><span>'+MET.auto+' auto-resolved · ~1 click</span></div><div class="bar"><i style="width:34%;background:#0d9488"></i></div></div>';
+  renderTrend();
+  renderSpark();
+  $('agNew').textContent=tickets.filter(function(t){ return t.status==='new'; }).length;
+  $('agAuto').textContent=MET.auto;
+  $('agMan').textContent=MET.manual;
+}
+
+/* =============== LIVE FEED =============== */
+function liveTick(){
+  if(!liveOn) return;
+  var events=1+Math.floor(Math.random()*3), deflCount=0;
+  for(var i=0;i<events;i++){
+    var intent=pick(['order','return','stock']);
+    var ch=Math.random()<0.5?'Chat':'Self-serve';
+    var tx=pick(LIVE_TX[intent]);
+    MET.catVol[intent]++;
+    if(Math.random()<0.68){ MET.solved++; TREND.d[6]++; deflCount++; logInq(ch,tx,catLabel[intent],'Deflected','o-def'); }
+    else { MET.escalated++; TREND.e[6]++; logInq(ch,tx,catLabel[intent],'Escalated','o-esc'); }
+  }
+  LIVE_SERIES.push(deflCount+4+Math.floor(Math.random()*4));
+  if(LIVE_SERIES.length>24) LIVE_SERIES.shift();
+  $('lastUpd').textContent='Updated '+new Date().toLocaleTimeString();
+  renderMetrics();
+}
+
+/* =============== WIRING (fixed) =============== */
+document.querySelectorAll('#tabsNav .tab').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('#tabsNav .tab').forEach(function(x){ x.classList.remove('active'); });
+    document.querySelectorAll('.tabpane').forEach(function(x){ x.classList.remove('active'); });
+    b.classList.add('active');
+    var pane=$('tab-'+b.getAttribute('data-tab'));
+    if(pane) pane.classList.add('active');
+    if(b.getAttribute('data-tab')==='dashboard') renderMetrics();
+  });
+});
+document.querySelectorAll('.chip-q').forEach(function(c){
+  c.addEventListener('click',function(){ handleUser(c.getAttribute('data-q')); });
+});
+$('chatForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  var v=$('chatText').value.trim();
+  if(!v) return;
+  $('chatText').value='';
+  handleUser(v);
+});
+$('ssTrack').addEventListener('click',ssTrack);
+$('ssReturn').addEventListener('click',ssReturn);
+$('ssStock').addEventListener('click',ssStock);
+$('ssProduct').addEventListener('change',populateSizes);
+$('ssSearch').addEventListener('input',function(){ renderTiles(this.value); });
+$('agSim').addEventListener('click',function(){
+  var s=SIM[simIdx%SIM.length]; simIdx++;
+  tickets.unshift({ id:'T-'+(ticketSeq++), cust:s.cust, subj:s.subj, body:'(simulated inbound)', intent:s.intent, conf:s.conf, status:'new', src:'Email' });
+  logInq('Email',s.subj,catLabel[s.intent],'Auto-tagged','o-inf');
+  renderTickets(); toast('📨 New ticket auto-tagged: '+catLabel[s.intent]);
+});
+$('liveToggle').addEventListener('click',function(){
+  liveOn=!liveOn;
+  this.textContent=liveOn?'⏸ Pause live feed':'▶ Resume live feed';
+  toast(liveOn?'Live feed resumed 📡':'Live feed paused');
+});
+
+/* init */
+$('ssProduct').innerHTML=PRODUCTS.map(function(p,i){ return '<option value="'+i+'">'+p.name+' · '+p.code+'</option>'; }).join('');
+populateSizes();
+renderTiles('');
+renderTickets();
+renderMetrics();
+renderLog();
+$('lastUpd').textContent='Updated '+new Date().toLocaleTimeString();
+setInterval(liveTick,5000);
+setTimeout(function(){
+  botSay('💙 <b>Welcome to NorthStar Sprint!</b> We\u2019re so glad you\u2019re here — and we\u2019re committed to you: instant answers, zero hold time, and a real human one tap away whenever you need one. I can help with <b>order status</b>, <b>returns & refunds</b> and <b>stock</b> right now. What can I solve for you?', menuButtons);
+},300);
+</script>
+</body>
+</html>
