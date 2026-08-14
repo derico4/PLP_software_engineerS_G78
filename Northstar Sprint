@@ -375,3 +375,240 @@ footer{border-top:1px solid var(--line);padding:18px 0 26px;color:var(--mut);fon
 <div id="toast"></div>
 
 <script>
+/* =============== MOCK SERVICE LAYER =============== */
+var ORDERS = {
+  'NS-1290': { status:'Processing', eta:'Arrives Jun 9–10', carrier:'UPS', tracking:'1Z 999 AA7 02',
+    tl:[['Order placed','Jun 4',1],['Packed at warehouse','—',0],['Shipped','—',0],['Out for delivery','—',0],['Delivered','—',0]] },
+  'NS-1042': { status:'Shipped', eta:'Arrives Jun 7', carrier:'UPS', tracking:'1Z 999 AA7 09',
+    tl:[['Order placed','Jun 1',1],['Packed at warehouse','Jun 2',1],['Shipped','Jun 3',1],['Out for delivery','—',0],['Delivered','—',0]] },
+  'NS-1177': { status:'Out for delivery', eta:'Arrives today by 8:00 PM', carrier:'FedEx', tracking:'7711 0042 17',
+    tl:[['Order placed','Jun 2',1],['Packed at warehouse','Jun 2',1],['Shipped','Jun 3',1],['Out for delivery','Jun 5',1],['Delivered','—',0]] },
+  'NS-0932': { status:'Delivered', delivered:'2025-05-15', eta:'Delivered May 15', carrier:'UPS', tracking:'1Z 999 AA7 01',
+    tl:[['Order placed','May 10',1],['Packed at warehouse','May 11',1],['Shipped','May 12',1],['Out for delivery','May 15',1],['Delivered','May 15',1]] }
+};
+var RETURNS = { 'NS-0932': { id:'R-2081', status:'In transit to warehouse', scanned:'Jun 3', eta:'Refund lands ~Jun 10 (3–5 biz days after warehouse scan), original payment method.' } };
+var PRODUCTS = [
+  { code:'NSR-10417', name:'Aurora Knit Sweater', cat:'Apparel', kw:['aurora','knit','sweater'], restock:'Jun 18', sizes:{'S':6,'M':0,'L':11,'XL':4} },
+  { code:'NSR-20881', name:'Pulse Wireless Earbuds', cat:'Electronics', kw:['pulse','earbuds','wireless'], restock:'Jun 12', sizes:{'Black':0,'White':14} },
+  { code:'NSR-30254', name:'Terra Ceramic Mug Set', cat:'Home', kw:['terra','mug','ceramic'], restock:null, sizes:{'Set of 2':22,'Set of 4':7} },
+  { code:'NSR-11902', name:'Stride Flex Leggings', cat:'Activewear', kw:['stride','leggings','flex'], restock:'Jun 21', sizes:{'XS':3,'S':0,'M':9,'L':0,'XL':5} },
+  { code:'NSR-40733', name:'Halo Desk Lamp', cat:'Home', kw:['halo','lamp','desk'], restock:null, sizes:{'Graphite':12,'Sand':0} },
+  { code:'NSR-50118', name:'Ember Insulated Bottle 750ml', cat:'Outdoor', kw:['ember','bottle','insulated'], restock:'Jun 10', sizes:{'Sage':18,'Charcoal':0,'Sky':6} },
+  { code:'NSR-60342', name:'Coast Canvas Jacket', cat:'Apparel', kw:['coast','jacket','canvas'], restock:'Jun 25', sizes:{'M':4,'L':0,'XL':2} },
+  { code:'NSR-70519', name:'Zenith Yoga Mat 5mm', cat:'Fitness', kw:['zenith','yoga','mat'], restock:null, sizes:{'Lavender':9,'Onyx':16} }
+];
+var STC = {'Processing':'#b45309','Shipped':'#1d4ed8','Out for delivery':'#6d28d9','Delivered':'#15803d'};
+var INTC = { order:'#2f6bff', return:'#7c3aed', stock:'#0d9488', unknown:'#dc2626', general:'#64748b' };
+var catLabel = { order:'Order status', return:'Returns & refunds', stock:'Stock availability', unknown:'Unclassified', general:'General' };
+var SUGG = { order:'Share tracking link + ETA.', return:'Share return portal link + refund SLA.', stock:'Share restock ETA + notify-me link.', unknown:'Needs human review.', general:'Route to specialist.' };
+
+var tickets = [
+  { id:'T-501', cust:'M. Rivera', subj:'Where is my order NS-1042?', body:'"It was supposed to be here this week, any update?"', intent:'order', conf:0.96, status:'new', src:'Email' },
+  { id:'T-502', cust:'J. Park', subj:'Refund not received yet', body:'"Returned it last week, when does the money land?"', intent:'return', conf:0.91, status:'new', src:'Chat' },
+  { id:'T-503', cust:'L. Nguyen', subj:'Stride Flex Leggings size S?', body:'"Do you have it in small? Site says sold out."', intent:'stock', conf:0.88, status:'new', src:'Email' },
+  { id:'T-504', cust:'S. Patel', subj:'Wrong item in my box', body:'"I ordered the lamp but got two mugs."', intent:'unknown', conf:0.42, status:'new', src:'Phone' }
+];
+var MET = { solved:138, escalated:74, auto:61, manual:39, notify:22, catVol:{ order:96, return:67, stock:49 } };
+var TREND = { d:[18,24,26,31,29,22,12], e:[9,8,7,6,7,5,3] };
+var DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+var LIVE_SERIES = [3,5,4,6,5,7,6,8,7,6,9,8,7,10];
+var INQ = [
+  { t:'09:12', ch:'Chat', tx:'Where is my order NS-1177?', i:'Order status', o:'Deflected', oc:'o-def' },
+  { t:'09:26', ch:'Self-serve', tx:'Refund status NS-0932', i:'Returns & refunds', o:'Answered', oc:'o-inf' },
+  { t:'09:41', ch:'Email', tx:'Pulse Earbuds Black restock?', i:'Stock availability', o:'Auto-resolved', oc:'o-def' }
+];
+var ticketSeq = 505, simIdx = 0, lastUserText = '', liveOn = true;
+var SIM = [
+  { subj:'Where\u2019s my package NS-1177?', intent:'order', conf:0.95, cust:'D. Kim' },
+  { subj:'When will my refund arrive?', intent:'return', conf:0.93, cust:'A. Lopez' },
+  { subj:'Zenith Yoga Mat Onyx available?', intent:'stock', conf:0.90, cust:'R. Shah' },
+  { subj:'Package arrived damaged', intent:'unknown', conf:0.41, cust:'T. Okafor' }
+];
+var LIVE_TX = {
+  order:['Where is my order NS-1042?','Has NS-1177 shipped yet?','Tracking update please'],
+  return:['How do I return my order?','Refund status please','When does my refund land?'],
+  stock:['Pulse Earbuds Black restock?','Stride Leggings S available?','Halo Lamp Sand in stock?']
+};
+
+/* =============== HELPERS =============== */
+function $(id){ return document.getElementById(id); }
+function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function badge(s){ var c=STC[s]||'#475569'; return '<span class="badge" style="background:'+c+'14;color:'+c+';border:1px solid '+c+'33">'+s+'</span>'; }
+function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){ t.classList.remove('show'); },2600); }
+function extractId(t){ var m=String(t).toUpperCase().match(/NS-\d{3,}/); return m?m[0]:null; }
+function timeStr(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function detectIntent(t){
+  if(/(return|refund|exchange|send back|money back)/.test(t)) return 'return';
+  if(/(stock|restock|size|available|availability|in stock|back in)/.test(t)) return 'stock';
+  if(/(order|where|track|shipping|shipped|deliver|status|package|parcel)/.test(t)) return 'order';
+  return null;
+}
+function logInq(ch,tx,intent,outcome,oc){ INQ.unshift({ t:timeStr(), ch:ch, tx:tx, i:intent, o:outcome, oc:oc }); if(INQ.length>40) INQ.pop(); renderLog(); }
+
+/* =============== CARD BUILDERS =============== */
+function orderCardHTML(id){
+  var o=ORDERS[id], tl='';
+  o.tl.forEach(function(s){ tl+='<div class="tl-row '+(s[2]?'done':'')+'"><i></i><div><b>'+s[0]+'</b><span>'+s[1]+'</span></div></div>'; });
+  return '<div class="ric"><div class="ric-head"><span>📦 '+id+'</span>'+badge(o.status)+'</div>'+
+    '<div class="ric-eta"><b>'+o.eta+'</b> · '+o.carrier+' · Trk '+o.tracking+'</div><div class="tl">'+tl+'</div></div>';
+}
+function returnStatusHTML(id){
+  var r=RETURNS[id];
+  return '<div class="ric"><div class="ric-head"><span>↩️ Return '+r.id+' · order '+id+'</span><span class="badge" style="background:#7c3aed14;color:#7c3aed;border:1px solid #7c3aed33">'+r.status+'</span></div>'+
+    '<div class="tl"><div class="tl-row done"><i></i><div><b>Return requested</b><span>Jun 1</span></div></div>'+
+    '<div class="tl-row done"><i></i><div><b>Carrier scanned (UPS)</b><span>'+r.scanned+'</span></div></div>'+
+    '<div class="tl-row"><i></i><div><b>Warehouse receives</b><span>pending · ~2 days</span></div></div>'+
+    '<div class="tl-row"><i></i><div><b>Refund issued</b><span>3–5 biz days after receipt</span></div></div></div>'+
+    '<div class="ric-note">💡 '+r.eta+'</div></div>';
+}
+function returnEligibleHTML(id){
+  return '<div class="ric"><div class="ric-head"><span>↩️ '+id+' · eligible ✅</span><span class="badge" style="background:#15803d14;color:#15803d;border:1px solid #15803d33">Within 30-day window</span></div>'+
+    '<ul class="steps"><li><b>Pack</b> the item(s) in any bag/box.</li><li><b>Show the QR label</b> (emailed to you) at any UPS drop-off — printing optional.</li><li><b>Refund</b> hits your original payment method 3–5 business days after the warehouse scan.</li></ul>'+
+    '<div class="ric-note">Prepaid label · $0 cost · refund SLA guaranteed.</div></div>';
+}
+function stockCardHTML(p,sizeSel){
+  var sz='';
+  Object.keys(p.sizes).forEach(function(k){
+    var n=p.sizes[k], sel=(k===sizeSel)?'outline:2px solid #2f6bff;outline-offset:1px;':'';
+    sz+='<span class="sz '+(n>0?'ok':'out')+'" style="'+sel+'">'+k+' · '+(n>0?(n+' in stock'):'out')+'</span>';
+  });
+  var note = p.restock ? '<div class="ric-note warn">🔁 Sold-out variants restock ~<b>'+p.restock+'</b>. Join notify-me and we email you the moment they land.</div>'
+                       : '<div class="ric-note">Available now — order soon.</div>';
+  return '<div class="ric"><div class="ric-head"><span>🏷️ '+p.name+'</span><span class="pt-code">'+p.code+'</span></div><div class="sizes">'+sz+'</div>'+note+'</div>';
+}
+
+/* =============== CHAT ENGINE =============== */
+var chatLog=$('chatLog'), chatStep='idle', chatIntent=null;
+function addMsg(who,html){ var m=el('<div class="msg '+who+'"><div class="bubble">'+html+'</div></div>'); chatLog.appendChild(m); chatLog.scrollTop=chatLog.scrollHeight; return m; }
+function botSay(html,cb){
+  var t=el('<div class="msg bot"><div class="bubble typing"><i></i><i></i><i></i></div></div>');
+  chatLog.appendChild(t); chatLog.scrollTop=chatLog.scrollHeight;
+  setTimeout(function(){ t.remove(); addMsg('bot',html); if(cb)cb(); },600);
+}
+function addBtns(list){
+  var w=el('<div class="msg bot"><div class="btns"></div></div>'), box=w.querySelector('.btns');
+  list.forEach(function(b){
+    var btn=el('<button type="button" class="chip">'+b.t+'</button>');
+    btn.addEventListener('click',function(){
+      var all=box.querySelectorAll('.chip'); for(var i=0;i<all.length;i++){ all[i].disabled=true; }
+      btn.classList.add('picked');
+      addMsg('user',esc(b.t));
+      b.cb();
+    });
+    box.appendChild(btn);
+  });
+  chatLog.appendChild(w); chatLog.scrollTop=chatLog.scrollHeight;
+}
+function menuButtons(){
+  addBtns([
+    { t:'📦 Where\u2019s my order?', cb:function(){ routeIntent('order',''); } },
+    { t:'↩️ Returns & refunds', cb:function(){ routeIntent('return',''); } },
+    { t:'🏷️ Stock check', cb:function(){ routeIntent('stock',''); } },
+    { t:'🙋 Human, please', cb:function(){ createTicket('general','chat request'); } }
+  ]);
+}
+function orderButtons(){
+  addBtns(Object.keys(ORDERS).map(function(id){ return { t:id, cb:function(){ if(chatIntent==='return'){ tryReturn(id); } else { tryOrder(id); } } }; }));
+}
+function routeIntent(intent,text){
+  chatIntent=intent; MET.catVol[intent]=(MET.catVol[intent]||0)+1;
+  if(intent==='order'){ chatStep='need_order'; if(extractId(text)) return tryOrder(text);
+    botSay('Happy to help 📦 — what\u2019s the <b>order number</b>? It looks like <code>NS-1042</code>.'); }
+  else if(intent==='return'){ chatStep='need_return'; if(extractId(text)) return tryReturn(text);
+    botSay('Of course ↩️ — which <b>order</b> would you like to return or check a refund for?'); }
+  else if(intent==='stock'){ chatStep='need_stock';
+    if(findProduct(text)) return tryStock(text);
+    botSay('Let me check the shelf 🏷️ — tell me the <b>product & size</b>, e.g. \u201cPulse Wireless Earbuds Black\u201d. You can also browse the full stock list under <b>Self-Serve</b>.'); }
+}
+function handleUser(text){
+  lastUserText=text;
+  addMsg('user',esc(text));
+  var low=text.toLowerCase();
+  if(/(human|agent|person|representative)/.test(low)){ createTicket(chatIntent||'general',text); return; }
+  if(chatStep==='need_order') return tryOrder(text);
+  if(chatStep==='need_return') return tryReturn(text);
+  if(chatStep==='need_stock') return tryStock(text);
+  var intent=detectIntent(low);
+  if(!intent){ botSay('No problem — I can solve three things instantly. Pick one or just type it naturally:'); menuButtons(); return; }
+  routeIntent(intent,text);
+}
+function csat(){
+  addBtns([
+    { t:'✅ Yes, that answered it', cb:function(){ MET.solved++; TREND.d[6]++; logInq('Chat',lastUserText,catLabel[chatIntent]||'General','Deflected','o-def'); renderMetrics(); toast('Deflected ✅ — no ticket created'); } },
+    { t:'🙋 No, I need a human', cb:function(){ createTicket(chatIntent||'general',lastUserText); } }
+  ]);
+}
+function createTicket(cat,ref){
+  var t={ id:'T-'+(ticketSeq++), cust:'Chat visitor', subj:(catLabel[cat]||'General')+' · '+(ref||'chat'), body:'Escalated from Deflect chat with full context attached.', intent:cat||'unknown', conf:0.9, status:'new', src:'Chat' };
+  tickets.unshift(t); MET.escalated++; TREND.e[6]++;
+  logInq('Chat',lastUserText||ref,catLabel[cat]||'General','Escalated','o-esc');
+  renderTickets(); renderMetrics();
+  botSay('No problem — I\u2019ve opened <b>'+t.id+'</b> and attached everything I learned (intent: '+(catLabel[cat]||'General')+'). A teammate will pick it up shortly; watch your email for updates. 💙');
+  chatStep='idle';
+}
+function tryOrder(text){
+  var id=extractId(text);
+  if(!id){ botSay('I couldn\u2019t find an order number there — tap one:'); orderButtons(); return; }
+  if(!ORDERS[id]){ botSay('Hmm, <b>'+id+'</b> isn\u2019t in this demo dataset. Try:'); orderButtons(); return; }
+  chatStep='idle';
+  botSay('Found it! Here\u2019s the live picture for <b>'+id+'</b>:'+orderCardHTML(id), csat);
+}
+function tryReturn(text){
+  var id=extractId(text);
+  if(!id){ botSay('Which order? Tap one:'); orderButtons(); return; }
+  if(!ORDERS[id]){ botSay('<b>'+id+'</b> isn\u2019t in this demo dataset. Try:'); orderButtons(); return; }
+  chatStep='idle';
+  if(RETURNS[id]){ botSay('You already have a return in motion ↩️:'+returnStatusHTML(id), csat); return; }
+  var o=ORDERS[id];
+  if(o.status!=='Delivered'){ botSay('Order <b>'+id+'</b> hasn\u2019t been delivered yet ('+o.status+'), so a return can\u2019t start until it arrives. Here\u2019s where it is:'+orderCardHTML(id), csat); return; }
+  var days=Math.round((new Date('2025-06-05')-new Date(o.delivered))/86400000);
+  if(days<=30){
+    botSay('Good news — <b>'+id+'</b> is within our 30-day window:'+returnEligibleHTML(id), function(){
+      addBtns([
+        { t:'🖨️ Generate prepaid label', cb:function(){ MET.solved++; TREND.d[6]++; logInq('Chat',lastUserText,'Returns & refunds','Deflected','o-def'); renderMetrics(); toast('Deflected ✅ — return started, no ticket'); botSay('Done! A prepaid <b>QR label</b> is in your email 📬. Drop the parcel at any UPS point; refund lands 3–5 business days after the warehouse scan.'); } },
+        { t:'🙋 Talk to a human', cb:function(){ createTicket('return',id); } }
+      ]);
+    });
+  } else {
+    botSay('Order <b>'+id+'</b> was delivered '+days+' days ago, past our 30-day window. I\u2019ve flagged it for a human to review options with you — we\u2019re committed to making it right.', function(){ createTicket('return',id); });
+  }
+}
+function findProduct(t){
+  var low=String(t).toLowerCase(), hit=null;
+  PRODUCTS.forEach(function(p){
+    if(low.indexOf(p.code.toLowerCase())>-1){ hit=p; return; }
+    p.kw.forEach(function(k){ if(low.indexOf(k)>-1) hit=p; });
+  });
+  return hit;
+}
+function findSize(p,t){
+  var low=String(t).toLowerCase(), hit=null;
+  Object.keys(p.sizes).forEach(function(k){
+    var rx=new RegExp('\\b'+k.toLowerCase().replace(/\s/g,'\\s?')+'\\b');
+    if(rx.test(low)) hit=k;
+  });
+  return hit;
+}
+function tryStock(text){
+  var p=findProduct(text);
+  if(!p){ botSay('Which product? Tap one:'); addBtns(PRODUCTS.slice(0,4).map(function(pr){ return { t:pr.name, cb:function(){ showStock(pr,null); } }; })); return; }
+  chatStep='idle';
+  showStock(p,findSize(p,text));
+}
+function showStock(p,size){
+  if(size && p.sizes[size]>0){
+    botSay('Yes! <b>'+p.name+' · '+size+'</b> is <b>in stock</b> ('+p.sizes[size]+' available) — order now and it ships today 🎉'+stockCardHTML(p,size), csat);
+  } else if(size && p.sizes[size]===0){
+    botSay('Sorry — <b>'+p.name+' · '+size+'</b> is sold out right now. Restock ETA <b>'+(p.restock||'TBD')+'</b>:'+stockCardHTML(p,size), function(){
+      addBtns([
+        { t:'🔔 Notify me when it\u2019s back', cb:function(){ MET.notify++; MET.solved++; TREND.d[6]++; logInq('Chat',lastUserText,'Stock availability','Deflected (notify-me)','o-def'); renderMetrics(); toast('Deflected ✅ — notify-me signup, no ticket'); botSay('You\u2019re on the list! 🔔 We\u2019ll email you the moment <b>'+size+'</b> restocks (~'+(p.restock||'soon')+').'); } },
+        { t:'🙋 Talk to a human', cb:function(){ createTicket('stock',p.name+' '+(size||'')); } }
+      ]);
+    });
+  } else {
+    botSay('Here\u2019s live availability for <b>'+p.name+'</b> ('+p.code+'):'+stockCardHTML(p,null), function(){
+      addBtns(Object.keys(p.sizes).map(function(k){ return { t:k, cb:function(){ showStock(p,k); } }; }).concat([{ t:'🙋 Human', cb:function(){ createTicket('stock',p.name); } }]));
+    });
+  }
