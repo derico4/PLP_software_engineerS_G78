@@ -612,3 +612,95 @@ function showStock(p,size){
       addBtns(Object.keys(p.sizes).map(function(k){ return { t:k, cb:function(){ showStock(p,k); } }; }).concat([{ t:'🙋 Human', cb:function(){ createTicket('stock',p.name); } }]));
     });
   }
+}
+
+/* =============== SELF-SERVE =============== */
+function ssPush(html){
+  var area=$('ssResult');
+  area.appendChild(el('<div class="result-card">'+html+'</div>'));
+  area.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function ssTrack(){
+  var id=extractId($('ssOrder').value||'');
+  if(!id||!ORDERS[id]){ ssPush('<h3>⚠️ Order not found</h3><p style="font-size:13px;color:var(--mut)">Try a demo order: NS-1042 · NS-1177 · NS-0932 · NS-1290.</p>'); return; }
+  logInq('Self-serve','Track '+id,'Order status','Answered','o-inf');
+  ssPush('<h3>Tracking — '+id+'</h3>'+orderCardHTML(id));
+}
+function ssReturn(){
+  var id=extractId($('ssOrder').value||'');
+  if(!id||!ORDERS[id]){ ssPush('<h3>⚠️ Order not found</h3><p style="font-size:13px;color:var(--mut)">Try NS-0932 (live return) or NS-1042.</p>'); return; }
+  logInq('Self-serve','Return '+id,'Returns & refunds','Answered','o-inf');
+  if(RETURNS[id]) return ssPush('<h3>Return status — '+id+'</h3>'+returnStatusHTML(id));
+  var o=ORDERS[id];
+  if(o.status!=='Delivered') return ssPush('<h3>Return — '+id+'</h3><div class="ric"><div class="ric-note warn">Not delivered yet ('+o.status+'). Returns open after delivery. Current status:</div></div>'+orderCardHTML(id));
+  ssPush('<h3>Return — '+id+'</h3>'+returnEligibleHTML(id)+'<p style="font-size:12px;color:var(--mut);margin-top:8px">In production this emails the QR label instantly via the returns-platform API.</p>');
+}
+function populateSizes(){
+  var p=PRODUCTS[parseInt($('ssProduct').value,10)], s=$('ssSize');
+  s.innerHTML=Object.keys(p.sizes).map(function(k){ return '<option>'+k+'</option>'; }).join('');
+}
+function ssStock(){
+  var p=PRODUCTS[parseInt($('ssProduct').value,10)], size=$('ssSize').value, n=p.sizes[size], extra='';
+  if(n===0 && $('ssNotify').checked){ MET.notify++; renderMetrics(); toast('🔔 Notify-me saved for '+p.name+' · '+size); extra='<div class="ric-note">🔔 You\u2019re on the restock list for '+size+'.</div>'; }
+  logInq('Self-serve','Stock '+p.name+' '+size,'Stock availability', n>0?'Answered':'Notify-me','o-inf');
+  ssPush('<h3>Availability — '+p.name+'</h3>'+stockCardHTML(p,size)+extra);
+}
+function renderTiles(filter){
+  var g=$('tileGrid'); g.innerHTML='';
+  var f=(filter||'').toLowerCase(), shown=0;
+  PRODUCTS.forEach(function(p,idx){
+    if(f && (p.name+' '+p.code+' '+p.cat).toLowerCase().indexOf(f)===-1) return;
+    shown++;
+    var total=0,out=0; Object.keys(p.sizes).forEach(function(k){ total+=p.sizes[k]; if(p.sizes[k]===0) out++; });
+    var avail=(out===Object.keys(p.sizes).length)?'All variants out':(total+' in stock');
+    var t=el('<button type="button" class="ptile"><div class="pt-top"><b>'+p.name+'</b><span class="pt-code">'+p.code+'</span></div><div class="pt-cat">'+p.cat+' · '+avail+'</div><div class="pt-sizes">'+Object.keys(p.sizes).map(function(k){ return '<span class="sz '+(p.sizes[k]>0?'ok':'out')+'">'+k+'</span>'; }).join('')+'</div></button>');
+    t.addEventListener('click',function(){
+      $('ssProduct').value=String(idx); populateSizes();
+      var all=g.querySelectorAll('.ptile'); for(var i=0;i<all.length;i++){ all[i].classList.remove('sel'); }
+      t.classList.add('sel');
+      toast('Selected '+p.name+' — pick a size & check ✓');
+    });
+    g.appendChild(t);
+  });
+  if(!shown) g.innerHTML='<div class="empty-small">No products match \u201c'+esc(filter||'')+'\u201d — try \u201cearbuds\u201d, \u201cjacket\u201d or a code like NSR-30254.</div>';
+}
+
+/* =============== AGENT CONSOLE =============== */
+function renderTickets(){
+  var list=$('ticketList'); list.innerHTML='';
+  tickets.forEach(function(t){
+    var c=INTC[t.intent]||'#64748b';
+    var row=el('<div class="ticket">'+
+      '<div class="tk-top"><span class="tk-id">'+t.id+' · '+t.cust+' · '+t.src+'</span>'+
+      '<span class="tk-tag" style="color:'+c+'">● '+catLabel[t.intent]+'</span>'+
+      '<span class="confbar" title="classifier confidence"><i style="width:'+Math.round(t.conf*100)+'%;background:'+c+'"></i></span>'+
+      '<span style="font-size:11px;color:var(--mut)">'+Math.round(t.conf*100)+'%</span></div>'+
+      '<div class="tk-subj">'+esc(t.subj)+'</div>'+
+      '<div class="tk-body">'+esc(t.body||'')+'</div>'+
+      '<div class="tk-actions">'+
+        (t.status==='new'
+          ? '<span class="tk-sugg">🤖 Suggested: '+(SUGG[t.intent]||'—')+'</span>'+
+            (t.conf>=0.85?'<button type="button" class="btn acc" data-act="auto" data-id="'+t.id+'">⚡ Auto-resolve &amp; send</button>':'')+
+            '<button type="button" class="btn ghost" data-act="manual" data-id="'+t.id+'">✋ Take manually</button>'
+          : '<span class="st '+t.status+'">'+(t.status==='auto'?'AUTO-RESOLVED ✅':'MANUAL 👤')+'</span>')+
+      '</div></div>');
+    list.appendChild(row);
+  });
+  var btns=list.querySelectorAll('button[data-act]');
+  for(var i=0;i<btns.length;i++){
+    (function(b){
+      b.addEventListener('click',function(){
+        var id=b.getAttribute('data-id'), tk=null;
+        for(var j=0;j<tickets.length;j++){ if(tickets[j].id===id) tk=tickets[j]; }
+        if(!tk) return;
+        if(b.getAttribute('data-act')==='auto'){ tk.status='auto'; MET.auto++; TREND.d[6]++; logInq('Triage',tk.subj,catLabel[tk.intent],'Auto-resolved','o-def'); toast('⚡ '+tk.id+' auto-resolved with drafted reply'); }
+        else { tk.status='manual'; MET.manual++; TREND.e[6]++; logInq('Triage',tk.subj,catLabel[tk.intent],'Manual','o-esc'); }
+        renderTickets(); renderMetrics();
+      });
+    })(btns[i]);
+  }
+  $('agNew').textContent=tickets.filter(function(t){ return t.status==='new'; }).length;
+  $('agAuto').textContent=MET.auto;
+  $('agMan').textContent=MET.manual;
+}
+
